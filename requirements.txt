@@ -1,2 +1,2 @@
-pynetbox==6.1.3
-python_powerdns==2.0.0
+pynetbox
+python_powerdns
