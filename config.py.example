@@ -1,3 +1,6 @@
+REQUESTS_CA_BUNDLE = "/etc/ssl/certs/example.pem"
+DEBUG = True
+
 NB_URL = "https://netbox.local/"
 NB_TOKEN = ""
 
