@@ -28,6 +28,8 @@ for forward_zone in FORWARD_ZONES:
     # assemble list with tupels containing the canonical name, the record type
     # and the IP address without the subnet from NetBox IPs
     for nb_ip in nb_ips:
+        if nb_ip.dns_name.replace("." + forward_zone, "").find(".") != -1:
+            continue
         if nb_ip.family.value == 6:
             type = "AAAA"
         else:
@@ -49,8 +51,11 @@ for forward_zone in FORWARD_ZONES:
     # PowerDNS zone records with the
     # comment "NetBox"
     for record in zone.records:
+        update = False
+        b = False
         for comment in record["comments"]:
             if comment["content"] == "NetBox":
+                b = True
                 for ip in record["records"]:
                     record_ips.append(
                         (
@@ -60,7 +65,12 @@ for forward_zone in FORWARD_ZONES:
                             forward_zone_canonical,
                         )
                     )
+            else:
+                update = True
         else:
+            if b == False:
+                update = True
+        if update:
             for ip in record["records"]:
                 record_wo_comment_ips.append(
                     (
@@ -70,6 +80,7 @@ for forward_zone in FORWARD_ZONES:
                         forward_zone_canonical,
                     )
                 )
+
 
 for reverse_zone in REVERSE_ZONES:
     # get IPs within the prefix from NetBox
@@ -109,6 +120,16 @@ for reverse_zone in REVERSE_ZONES:
                             reverse_zone["zone"],
                         )
                     )
+        else:
+            for ip in record["records"]:
+                record_wo_comment_ips.append(
+                    (
+                        record["name"],
+                        record["type"],
+                        ip["content"],
+                        forward_zone_canonical,
+                    )
+                )
 
 # create set with tupels that have to be created
 # tupels from NetBox without tupels that already exists in PowerDNS
@@ -124,7 +145,7 @@ to_delete = set(record_ips) - set(host_ips)
 
 # create set with tupels that are missing
 # tupels from PowerDNS that are not documented in NetBox
-missing = set(record_wo_comment_ips) - (set(record_ips) - set(host_ips))
+missing = set(record_wo_comment_ips) - set(record_ips) - set(host_ips)
 
 print("----")
 
