@@ -26,7 +26,9 @@ for forward_zone in FORWARD_ZONES:
     forward_zone_canonical = forward_zone.name + "."
 
     # get IPs with DNS name ending in forward_zone from NetBox
-    records = nb.plugins.netbox_dns.records.filter(zone=forward_zone.name, type__n=["NS","SOA"])
+    records = nb.plugins.netbox_dns.records.filter(
+        zone=forward_zone.name, type__n=["NS", "SOA"]
+    )
 
     # assemble list with tupels containing the canonical name, the record type
     # and the IP address without the subnet from NetBox IPs
@@ -83,19 +85,21 @@ for reverse_zone in REVERSE_ZONES:
     reverse_zone_canonical = reverse_zone.name + "."
 
     # get IPs within the prefix from NetBox
-    records = nb.plugins.netbox_dns.records.filter(zone=reverse_zone.name, type__n=["NS","SOA"])
+    records = nb.plugins.netbox_dns.records.filter(
+        zone=reverse_zone.name, type__n=["NS", "SOA"]
+    )
 
     # assemble list with tupels containing the canonical name, the record type
     # and the IP address without the subnet from NetBox IPs
     for record in records:
-            host_ips.append(
-                (
-                    record.name + "." + reverse_zone_canonical,
-                    record.type,
-                    record.value,
-                    reverse_zone_canonical,
-                )
+        host_ips.append(
+            (
+                record.name + "." + reverse_zone_canonical,
+                record.type,
+                record.value,
+                reverse_zone_canonical,
             )
+        )
 
     # get zone forward_zone_canonical form PowerDNS
     zone = pdns.get_zone(reverse_zone_canonical)
