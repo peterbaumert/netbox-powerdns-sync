@@ -7,7 +7,7 @@ import ipaddress
 import os
 
 from config import NB_URL, NB_TOKEN, PDNS_API_URL, PDNS_KEY
-from config import FORWARD_ZONES, REVERSE_ZONES, REQUESTS_CA_BUNDLE
+from config import REQUESTS_CA_BUNDLE
 from config import DEBUG
 
 os.environ["REQUESTS_CA_BUNDLE"] = REQUESTS_CA_BUNDLE
@@ -16,29 +16,26 @@ nb = pynetbox.api(NB_URL, token=NB_TOKEN)
 pdns_api_client = powerdns.PDNSApiClient(api_endpoint=PDNS_API_URL, api_key=PDNS_KEY)
 pdns = powerdns.PDNSEndpoint(pdns_api_client).servers[0]
 
+FORWARD_ZONES = nb.plugins.netbox_dns.zones.filter(tag=["forward-zone"])
+REVERSE_ZONES = nb.plugins.netbox_dns.zones.filter(tag=["reverse-zone"])
+
 host_ips = []
 record_ips = []
 record_wo_comment_ips = []
 for forward_zone in FORWARD_ZONES:
-    forward_zone_canonical = forward_zone + "."
+    forward_zone_canonical = forward_zone.name + "."
 
     # get IPs with DNS name ending in forward_zone from NetBox
-    nb_ips = nb.ipam.ip_addresses.filter(dns_name__iew=forward_zone)
+    records = nb.plugins.netbox_dns.records.filter(zone=forward_zone.name, type__n=["NS","SOA"])
 
     # assemble list with tupels containing the canonical name, the record type
     # and the IP address without the subnet from NetBox IPs
-    for nb_ip in nb_ips:
-        if nb_ip.dns_name.replace("." + forward_zone, "").find(".") != -1:
-            continue
-        if nb_ip.family.value == 6:
-            type = "AAAA"
-        else:
-            type = "A"
+    for record in records:
         host_ips.append(
             (
-                nb_ip.dns_name + ".",
-                type,
-                re.sub("/[0-9]*", "", str(nb_ip)),
+                record.name + "." + forward_zone_canonical,
+                record.type,
+                record.value,
                 forward_zone_canonical,
             )
         )
@@ -83,26 +80,25 @@ for forward_zone in FORWARD_ZONES:
 
 
 for reverse_zone in REVERSE_ZONES:
+    reverse_zone_canonical = reverse_zone.name + "."
+
     # get IPs within the prefix from NetBox
-    nb_ips = nb.ipam.ip_addresses.filter(parent=reverse_zone["prefix"])
+    records = nb.plugins.netbox_dns.records.filter(zone=reverse_zone.name, type__n=["NS","SOA"])
 
     # assemble list with tupels containing the canonical name, the record type
     # and the IP address without the subnet from NetBox IPs
-    for nb_ip in nb_ips:
-        if nb_ip.dns_name != "":
-            ip = re.sub("/[0-9]*", "", str(nb_ip))
-            reverse_pointer = ipaddress.ip_address(ip).reverse_pointer
+    for record in records:
             host_ips.append(
                 (
-                    reverse_pointer + ".",
-                    "PTR",
-                    nb_ip.dns_name + ".",
-                    reverse_zone["zone"],
+                    record.name + "." + reverse_zone_canonical,
+                    record.type,
+                    record.value,
+                    reverse_zone_canonical,
                 )
             )
 
     # get zone forward_zone_canonical form PowerDNS
-    zone = pdns.get_zone(reverse_zone["zone"])
+    zone = pdns.get_zone(reverse_zone_canonical)
 
     # assemble list with tupels containing the canonical name, the record type,
     # the IP address and forward_zone_canonical without the subnet from
@@ -117,7 +113,7 @@ for reverse_zone in REVERSE_ZONES:
                             record["name"],
                             record["type"],
                             ip["content"],
-                            reverse_zone["zone"],
+                            reverse_zone_canonical,
                         )
                     )
         else:
@@ -127,7 +123,7 @@ for reverse_zone in REVERSE_ZONES:
                         record["name"],
                         record["type"],
                         ip["content"],
-                        forward_zone_canonical,
+                        reverse_zone_canonical,
                     )
                 )
 
